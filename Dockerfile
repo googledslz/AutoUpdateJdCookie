@@ -21,4 +21,5 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY . .
 
 # 定义启动命令，运行 main.py
-CMD ["python", "schedule_main.py"]
+# CMD ["python", "schedule_main.py"]
+CMD ["/app/jd.sh"]
