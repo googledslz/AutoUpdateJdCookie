@@ -1,4 +1,4 @@
-name: Docker Build BY DSLZ
+name: Push Docker image to Docker Hub
 
 on:
   workflow_dispatch:  # 设置为手动触发
@@ -9,29 +9,18 @@ on:
         default: 'latest'
 
 jobs:
-  build-and-push:
+  docker:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Set timezone to Asia/Shanghai
-        run: |
-           sudo timedatectl set-timezone Asia/Shanghai
-            date
-          
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-
       - name: Set timezone to Asia/Shanghai
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
           date
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+      
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -43,19 +32,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "latest"
-        
+
+
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
-        id: docker_build
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .  # Docker上下文路径，默认为当前目录
           file: ./Dockerfile  # Dockerfile 的路径
           push: true
-          tags: |
-         #  dslz666/autojdck:${{ github.run_number }}
-         #   dslz666/autojdck:${{ github.sha }}
-            dslz666/autojdck:${{ inputs.tag }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/autojdc:latest
+          
+          
+          
+          
