@@ -14,9 +14,9 @@ jobs:
 
     steps:
           - name: Set timezone to Asia/Shanghai
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          date
+            run: |
+           sudo timedatectl set-timezone Asia/Shanghai
+            date
           
       - name: Checkout repository
         uses: actions/checkout@v2
