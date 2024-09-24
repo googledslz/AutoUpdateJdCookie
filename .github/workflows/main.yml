@@ -33,6 +33,6 @@ jobs:
           file: ./Dockerfile  # Dockerfile 的路径
           push: true
           tags: |
-            yourdockerhubusername/your-repo-name:${{ github.run_number }}
-            yourdockerhubusername/your-repo-name:${{ github.sha }}
-            yourdockerhubusername/your-repo-name:${{ inputs.tag }}
+            dslz666/AutoUpdateJdCookie:${{ github.run_number }}
+            dslz666/AutoUpdateJdCookie:${{ github.sha }}
+            dslz666/AutoUpdateJdCookie:${{ inputs.tag }}
