@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-          - name: Set timezone to Asia/Shanghai
-            run: |
+      - name: Set timezone to Asia/Shanghai
+        run: |
            sudo timedatectl set-timezone Asia/Shanghai
             date
           
