@@ -18,17 +18,17 @@ RUN playwright install-deps
 
 
 # 更新系统并安装必要的工具
-RUN apt update && apt upgrade -y \
-    && apt-get install -y software-properties-common \
-    && apt-get update \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y python3.12 python3.12-venv python3-pip \
-    && python3.12 -m venv /app/venv \
-    && . /app/venv/bin/activate \
-    && pip install --no-cache-dir -r requirements.txt \
-    && playwright install firefox \
-    && playwright install-deps firefox
+#RUN apt update && apt upgrade -y \
+    #&& apt-get install -y software-properties-common \
+    #&& apt-get update \
+    #&& add-apt-repository ppa:deadsnakes/ppa \
+    #&& apt-get update \
+    #&& apt-get install -y python3.12 python3.12-venv python3-pip \
+    #&& python3.12 -m venv /app/venv \
+    #&& . /app/venv/bin/activate \
+    #&& pip install --no-cache-dir -r requirements.txt \
+    #&& playwright install firefox \
+    #&& playwright install-deps firefox
 
 
 # 时区
