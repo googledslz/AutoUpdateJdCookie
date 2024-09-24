@@ -4,3 +4,12 @@ playwright
 loguru
 croniter
 inputimeout
+
+
+requests
+aiohttp
+
+
+quart
+hypercorn
+uvloop
