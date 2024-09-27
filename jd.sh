@@ -3,14 +3,14 @@
 #!/bin/bash  
 export TZ='Asia/Shanghai' 
 
- cd /app
+# cd /app
  
-echo 启动 cron服务状态：
-sudo service cron start
+#echo 启动 cron服务状态：
+#sudo service cron start
 
-echo 检查cron服务状态：
-sudo service cron status
-sleep 2
+#echo 检查cron服务状态：
+#sudo service cron status
+#sleep 2
 
 
     # 获取当前时间，并格式化为指定格式
@@ -18,14 +18,14 @@ sleep 2
 
  
    # 直接通过进程名称终止所有Python 3.11进程
-   pkill python3.11
-   pkill python
+ #  pkill python3.11
+ #  pkill python
 
    # 强制终止所有Python 3.11进程
-   pkill -9 python3.11
-   pkill -9 python
+ #  pkill -9 python3.11
+  # pkill -9 python
 
-   pkill chrome
+  # pkill chrome
   
 
 
@@ -38,7 +38,7 @@ current_timezone=$(date +"%Z")
 #!/bin/bash
 
     # 定时多少分钟
- min_=20
+ min_=150
 while true
 do
     python main.py  # 运行 Python 脚本
@@ -67,14 +67,14 @@ do
     
     
    # 直接通过进程名称终止所有Python 3.11进程
-   pkill python3.11
-   pkill python
+ # pkill python3.11
+  # pkill python
 
    # 强制终止所有Python 3.11进程
-   pkill -9 python3.11
-   pkill -9 python
+  # pkill -9 python3.11
+  # pkill -9 python
 
-   pkill chrome
+  # pkill chrome
    
    
    
@@ -97,7 +97,7 @@ do
 
     # 切换到脚本所在目录
     #cd /home/kasm-user/Desktop/dslz666
-    cd /app
+   # cd /app
 
     # 运行 Python 脚本
     python main.py
