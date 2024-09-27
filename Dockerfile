@@ -38,6 +38,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 复制应用文件
 COPY . .
 
+# 设置 jd.sh 的权限为 777
+RUN chmod 777 /app/jd.sh
+
 # 安装 Chromium 浏览器，Playwright 需要这个浏览器
 RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
