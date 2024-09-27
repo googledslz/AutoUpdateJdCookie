@@ -50,9 +50,9 @@ jobs:
           context: .  # Docker上下文路径，默认为当前目录
           file: ./Dockerfile  # Dockerfile 的路径
           push: true
-        # tags: ${{ secrets.DOCKER_USERNAME }}/autojdck:latest
-        # tags: ${{ secrets.DOCKER_USERNAME }}/autojdck:${{ github.run_number }}-${{ github.run_id }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/autojdck:${{ env.TAG_TIMESTAMP }}
+        # tags: ${{ secrets.DOCKER_USERNAME }}/dslz666_autojdck:latest
+        # tags: ${{ secrets.DOCKER_USERNAME }}/dslz666_autojdck:${{ github.run_number }}-${{ github.run_id }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/dslz666_autojdck:${{ env.TAG_TIMESTAMP }}
           
           
           
