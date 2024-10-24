@@ -4,7 +4,18 @@ user_datas = {
         "password": "123456",
         "pt_pin": "123456",
         "sms_func": "webhook",
-        "sms_webhook": "https://127.0.0.1:3000/getCode"
+        "sms_webhook": "https://127.0.0.1:3000/getCode",
+        # 设置为True时, 即使账号未失效也更新
+        "force_update": False
+    },
+    # QQ账号
+    "168465451": {
+        # qq密码
+        "password": "123456",
+        "pt_pin": "123456",
+        # 指定为qq账号
+        "user_type": "qq",
+        "force_update": True
     },
     "13500000001": {
         "password": "123456",
@@ -28,20 +39,11 @@ qinglong_data = {
     "token": ""
 }
 
-# 滑块验证码的偏差, 如果一直滑过了, 或滑不到, 可以调节下
-slide_difference = 10
-
-# 是否自动识别移动滑块，有时不准，就关掉吧
-auto_move = True
-
-# 是否自动形状验证码识别，有时不准，就关掉吧
-auto_shape_recognition = True
-
 # 定时器
 cron_expression = "0 5-6 * * *"
 
 # 浏览器是否开启无头模式，即是否展示整个登录过程
-headless = False
+headless = True
 
 # 是否开启发消息
 is_send_msg = False
@@ -61,9 +63,19 @@ send_info = {
     ]
 }
 
-# sms_func为填写验信验证码的模式，有3种可选，webhook待实现
+# sms_func为填写验信验证码的模式，有3种可选，如下：
 # no 关闭短信验证码识别
 # manual_input 手动在终端输入验证码
-# TODO: webhook 调用api获取验证码,可实现全自动填写验证码
+# webhook 调用api获取验证码,可实现全自动填写验证码
 sms_func = "manual_input"
 sms_webhook = "https://127.0.0.1:3000/getCode"
+
+# 代理的配置，只代理登录，不代理请求QL面板和发消息
+proxy = {
+    # 代理服务器地址, 支持http, https, socks5
+    "server": "http://",
+    # 代理服务器账号
+    "username": "",
+    # 代理服务器密码
+    "password": ""
+}

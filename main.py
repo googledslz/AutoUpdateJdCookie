@@ -3,10 +3,8 @@ import asyncio
 from api.qinglong import QlApi, QlOpenApi
 from api.send import SendApi
 from config import (
-    auto_move,
     qinglong_data,
     user_datas,
-    auto_shape_recognition,
 )
 import cv2
 import json
@@ -41,7 +39,8 @@ from utils.tools import (
     expand_coordinates,
     cv2_save_img,
     ddddocr_find_bytes_pic,
-    solve_slider_captcha
+    solve_slider_captcha,
+    validate_proxy_config
 )
 
 """
@@ -68,7 +67,6 @@ async def auto_move_slide(page, retry_times: int = 2, slider_selector: str = 'im
     """
     自动识别移动滑块验证码
     """
-    from config import slide_difference
     for i in range(retry_times):
         logger.info(f'第{i + 1}次尝试自动移动滑块中...')
         try:
@@ -106,6 +104,9 @@ async def auto_move_slide(page, retry_times: int = 2, slider_selector: str = 'im
         # 获取滑块
         slider = page.locator(slider_selector)
         await asyncio.sleep(1)
+
+        # 这里是一个标准算法偏差
+        slide_difference = 10
 
         if move_solve_type == "old":
             # 用于调试
@@ -202,7 +203,14 @@ async def auto_shape(page, retry_times: int = 5):
         elif word.find('依次') > 0:
             logger.info(f'开始文字识别,点击中......')
             # 获取文字的顺序列表
-            target_char_list = list(re.findall(r'[\u4e00-\u9fff]+', word)[1])
+            try:
+                target_char_list = list(re.findall(r'[\u4e00-\u9fff]+', word)[1])
+            except IndexError:
+                logger.info(f'识别文字出错,刷新中......')
+                await refresh_button.click()
+                await asyncio.sleep(random.uniform(2, 4))
+                continue
+
             target_char_len = len(target_char_list)
 
             # 识别字数不对
@@ -290,10 +298,6 @@ async def auto_shape(page, retry_times: int = 5):
 
 
 async def sms_recognition(page, user):
-    logger.info("开始短信验证码识别")
-    if await page.locator('text="手机短信验证"').count() == 0:
-        return
-
     try:
         from config import sms_func
     except ImportError:
@@ -305,7 +309,7 @@ async def sms_recognition(page, user):
         raise Exception(f"sms_func只支持{supported_sms_func}")
 
     if sms_func == "no":
-        raise Exception("需要填写验证码")
+        raise Exception("sms_func为no关闭, 跳过短信验证码识别环节")
 
     logger.info('点击【获取验证码】中')
     await page.click('button.getMsg-btn')
@@ -328,7 +332,7 @@ async def sms_recognition(page, user):
             return
 
     # 通过调用web_hook的方式来实现全自动输入验证码
-    elif sms_func == "web_hook":
+    elif sms_func == "webhook":
         from utils.tools import send_request
         try:
             from config import sms_webhook
@@ -367,44 +371,93 @@ async def get_jd_pt_key(playwright: Playwright, user) -> Union[str, None]:
         headless = False
 
     args = '--no-sandbox', '--disable-setuid-sandbox'
-    browser = await playwright.chromium.launch(headless=headless, args=args)
+
+    try:
+        # 引入代理
+        from config import proxy
+        # 检查代理的配置
+        is_proxy_valid, msg = validate_proxy_config(proxy)
+        if not is_proxy_valid:
+            logger.error(msg)
+            proxy = None
+        if msg == "未配置代理":
+            logger.info(msg)
+            proxy = None
+    except ImportError:
+        logger.info("未配置代理")
+        proxy = None
+
+    browser = await playwright.chromium.launch(headless=headless, args=args, proxy=proxy)
     context = await browser.new_context()
 
     try:
         page = await context.new_page()
+        await page.set_viewport_size({"width": 360, "height": 640})
         await page.goto(jd_login_url)
-        await page.get_by_text("账号密码登录").click()
 
-        username_input = page.get_by_placeholder("账号名/邮箱/手机号")
-        await username_input.click()
-        for u in user:
-            await username_input.type(u, no_wait_after=True)
-            await asyncio.sleep(random.random() / 10)
+        if user_datas[user].get("user_type") == "qq":
+            await page.get_by_role("checkbox").check()
+            await asyncio.sleep(1)
+            # 点击QQ登录
+            await page.locator("a.quick-qq").click()
+            await asyncio.sleep(1)
 
-        password_input = page.get_by_placeholder("请输入密码")
-        await password_input.click()
-        password = user_datas[user]["password"]
-        for p in password:
-            await password_input.type(p, no_wait_after=True)
-            await asyncio.sleep(random.random() / 10)
+            # 等待 iframe 加载完成
+            await page.wait_for_selector("#ptlogin_iframe")
+            # 切换到 iframe
+            iframe = page.frame(name="ptlogin_iframe")
 
-        await page.get_by_role("checkbox").check()
-        await page.get_by_text("登 录").click()
+            # 通过 id 选择 "密码登录" 链接并点击
+            await iframe.locator("#switcher_plogin").click()
+            await asyncio.sleep(1)
+            # 填写账号
+            username_input = iframe.locator("#u")  # 替换为实际的账号
+            for u in user:
+                await username_input.type(u, no_wait_after=True)
+                await asyncio.sleep(random.random() / 10)
+            await asyncio.sleep(1)
+            # 填写密码
+            password_input = iframe.locator("#p")  # 替换为实际的密码
+            password = user_datas[user]["password"]
+            for p in password:
+                await password_input.type(p, no_wait_after=True)
+                await asyncio.sleep(random.random() / 10)
+            await asyncio.sleep(1)
+            # 点击登录按钮
+            await iframe.locator("#login_button").click()
 
-        # 自动识别移动滑块验证码
-        if auto_move:
-            # 关键的sleep
+        else:
+            await page.get_by_text("账号密码登录").click()
+
+            username_input = page.locator("#username")
+            for u in user:
+                await username_input.type(u, no_wait_after=True)
+                await asyncio.sleep(random.random() / 10)
+
+            password_input = page.locator("#pwd")
+            password = user_datas[user]["password"]
+            for p in password:
+                await password_input.type(p, no_wait_after=True)
+                await asyncio.sleep(random.random() / 10)
+
+            await asyncio.sleep(random.random())
+            await page.locator('.policy_tip-checkbox').click()
+            await asyncio.sleep(random.random())
+            await page.locator('.btn.J_ping.btn-active').click()
+
+            # 自动识别移动滑块验证码
             await asyncio.sleep(1)
             await auto_move_slide(page, retry_times=5)
 
             # 自动验证形状验证码
-            if auto_shape_recognition:
-                await asyncio.sleep(1)
-                await auto_shape(page, retry_times=30)
+            await asyncio.sleep(1)
+            await auto_shape(page, retry_times=30)
 
             # 进行短信验证识别
             await asyncio.sleep(1)
-            await sms_recognition(page, user)
+            if await page.locator('text="手机短信验证"').count() != 0:
+                logger.info("开始短信验证码识别环节")
+                await sms_recognition(page, user)
 
         # 等待验证码通过
         logger.info("等待获取cookie...")
@@ -487,8 +540,11 @@ async def main():
             raise Exception(f"获取环境变量失败， response: {response}")
 
         user_info = response['data']
-        # 获取禁用用户
-        forbidden_users = [x for x in user_info if x['name'] == 'JD_COOKIE' and x['status'] == 1]
+
+        # 获取需强制更新pt_pin
+        force_update_pt_pins = [user_datas[key]["pt_pin"] for key in user_datas if user_datas[key].get("force_update") is True]
+        # 获取需强制和需要强制更新的users
+        forbidden_users = [x for x in user_info if x['name'] == 'JD_COOKIE' and (x['status'] == 1 or x['value'].rstrip(';').split('pt_pin=')[1] in force_update_pt_pins)]
 
         if not forbidden_users:
             logger.info("所有COOKIE环境变量正常，无需更新")
