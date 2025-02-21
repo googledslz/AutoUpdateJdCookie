@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from api.qinglong import QlApi, QlOpenApi
 from api.send import SendApi
+from utils.ck import get_invalid_ck_ids
 from config import (
     qinglong_data,
     user_datas,
@@ -43,7 +44,9 @@ from utils.tools import (
     ddddocr_find_bytes_pic,
     solve_slider_captcha,
     validate_proxy_config,
-    is_valid_verification_code
+    is_valid_verification_code,
+    filter_cks,
+    extract_pt_pin
 )
 
 """
@@ -179,7 +182,7 @@ async def auto_shape(page, retry_times: int = 5):
 
         # 获取 图片的src 属性和button按键
         word_img_src = await page.locator('div.captcha_footer img').get_attribute('src')
-        button = page.locator('div.captcha_footer button.sure_btn')
+        button = page.locator('div.captcha_footer button#submit-btn')
 
         # 找到刷新按钮
         refresh_button = page.locator('.jcap_refresh')
@@ -281,15 +284,20 @@ async def auto_shape(page, retry_times: int = 5):
                 continue
 
             await asyncio.sleep(random.uniform(0, 1))
-            for char in target_list:
-                center_x = char[1][0]
-                center_y = char[1][1]
-                # 得到网页上的中心点
-                x, y = backend_top_left_x + center_x, backend_top_left_y + center_y
-                # 点击图片
-                await page.mouse.click(x, y)
-                await asyncio.sleep(random.uniform(1, 4))
-
+            try:
+                for char in target_list:
+                    center_x = char[1][0]
+                    center_y = char[1][1]
+                    # 得到网页上的中心点
+                    x, y = backend_top_left_x + center_x, backend_top_left_y + center_y
+                    # 点击图片
+                    await page.mouse.click(x, y)
+                    await asyncio.sleep(random.uniform(1, 4))
+            except IndexError:
+                logger.info(f'识别文字出错,刷新中......')
+                await refresh_button.click()
+                await asyncio.sleep(random.uniform(2, 4))
+                continue
             # 点击确定
             await button.click()
             await asyncio.sleep(random.uniform(2, 4))
@@ -592,12 +600,31 @@ async def main(mode: str = None):
             logger.error(f"获取环境变量失败， response: {response}")
             raise Exception(f"获取环境变量失败， response: {response}")
 
-        user_info = response['data']
+        env_data = response['data']
+        # 获取值为JD_COOKIE的环境变量
+        jd_ck_env_datas = filter_cks(env_data, name='JD_COOKIE')
+        # 从value中过滤出pt_pin, 注意只支持单行单pt_pin
+        jd_ck_env_datas = [ {**x, 'pt_pin': extract_pt_pin(x['value'])} for x in jd_ck_env_datas if extract_pt_pin(x['value'])]
+
+        try:
+            logger.info("检测CK任务开始")
+            # 先获取启用中的env_data
+            up_jd_ck_list = filter_cks(jd_ck_env_datas, status=0, name='JD_COOKIE')
+            # 这一步会去检测这些JD_COOKIE
+            ck_ids_datas = await get_invalid_ck_ids(up_jd_ck_list)
+            if ck_ids_datas:
+                # 禁用QL的失效环境变量
+                await qlapi.envs_disable(data=ck_ids_datas)
+                # 更新jd_ck_env_datas
+                jd_ck_env_datas = [{**x, 'status': 1} for x in jd_ck_env_datas if x.get('id') in ck_ids_datas or x.get('_id') in ck_ids_datas]
+            logger.info("检测CK任务完成")
+        except Exception as e:
+            logger.error(f"检测CK任务失败, 跳过检测, 报错原因为{e}")
 
         # 获取需强制更新pt_pin
         force_update_pt_pins = [user_datas[key]["pt_pin"] for key in user_datas if user_datas[key].get("force_update") is True]
-        # 获取需强制和需要强制更新的users
-        forbidden_users = [x for x in user_info if x['name'] == 'JD_COOKIE' and (x['status'] == 1 or x['value'].rstrip(';').split('pt_pin=')[1] in force_update_pt_pins)]
+        # 获取禁用和需要强制更新的users
+        forbidden_users = [x for x in jd_ck_env_datas if (x['status'] == 1 or x['pt_pin'] in force_update_pt_pins)]
 
         if not forbidden_users:
             logger.info("所有COOKIE环境变量正常，无需更新")
@@ -608,6 +635,9 @@ async def main(mode: str = None):
 
         # 生成字典
         user_dict = get_forbidden_users_dict(filter_users_list, user_datas)
+        if not user_dict:
+            logger.info("失效的CK信息未配置在user_datas内，无需更新")
+            return
 
         # 登录JD获取pt_key
         async with async_playwright() as playwright:
