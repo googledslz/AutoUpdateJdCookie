@@ -86,6 +86,40 @@ async def check_notice(page):
         logger.info("登录未发现报错")
         return
 
+async def auto_move_slide_v2(page, retry_times: int = 2, slider_selector: str = 'img.move-img', move_solve_type: str = ""):
+    for i in range(retry_times):
+        logger.info(f'第{i + 1}次开启滑块验证')
+        # 查找小图
+        try:
+            # 查找小图
+            await page.wait_for_selector('.captcha_drop', state='visible', timeout=3000)
+        except Exception as e:
+            logger.info('未找到验证码框, 退出滑块验证')
+            return
+        await auto_move_slide(page, retry_times=5, slider_selector = slider_selector, move_solve_type = move_solve_type)
+
+        # 判断是否一次过了滑块
+        captcha_drop_visible = await page.is_visible('.captcha_drop')
+
+        # 存在就重新滑一次
+        if captcha_drop_visible:
+            if i == retry_times - 1:
+                return
+            logger.info('一次过滑块失败, 再次尝试滑块验证')
+            await page.wait_for_selector('.captcha_drop', state='visible', timeout=3000)
+            # 点外键
+            sign_locator = page.locator('#header').locator('.text-header')
+            sign_locator_box = await sign_locator.bounding_box()
+            sign_locator_left_x = sign_locator_box['x']
+            sign_locator_left_y = sign_locator_box['y']
+            await page.mouse.click(sign_locator_left_x, sign_locator_left_y)
+            await asyncio.sleep(1)
+            # 提交键
+            submit_locator = page.locator('.btn.J_ping.active')
+            await submit_locator.click()
+            await asyncio.sleep(1)
+            continue
+        return
 
 async def auto_move_slide(page, retry_times: int = 2, slider_selector: str = 'img.move-img', move_solve_type: str = ""):
     """
@@ -402,6 +436,60 @@ async def sms_recognition(page, user, mode):
     logger.info('点击提交中...')
     await page.click('a.btn')
 
+
+async def voice_verification(page, user, mode):
+    from utils.consts import supported_voice_func
+    try:
+        from config import voice_func
+    except ImportError:
+        voice_func = "no"
+
+    voice_func = user_datas[user].get("voice_func", voice_func)
+
+    if voice_func not in supported_voice_func:
+        raise Exception(f"voice_func只支持{supported_voice_func}")
+
+    if mode == "cron" and voice_func == "manual_input":
+        voice_func = "no"
+
+    if voice_func == "no":
+        raise Exception("voice_func为no关闭, 跳过手机语音识别")
+
+    logger.info('点击获取验证码中')
+    await page.click('button.getMsg-btn:has-text("点击获取验证码")')
+    await asyncio.sleep(1)
+    # 自动识别滑块
+    await auto_move_slide(page, retry_times=5, slider_selector='div.bg-blue')
+    await auto_shape(page, retry_times=30)
+
+    # 识别是否成功发送验证码
+    await page.wait_for_selector('button.getMsg-btn:has-text("重新发送")', timeout=3000)
+    logger.info("发送手机语音识别验证码成功")
+
+    # 手动输入
+    # 用户在60S内，手动在终端输入验证码
+    if voice_func == "manual_input":
+        from inputimeout import inputimeout, TimeoutOccurred
+        try:
+            verification_code = inputimeout(prompt="请输入验证码：", timeout=60)
+        except TimeoutOccurred:
+            return
+
+    await asyncio.sleep(1)
+    if not is_valid_verification_code(verification_code):
+        logger.error(f"验证码需为6位数字, 输入的验证码为{verification_code}, 异常")
+        raise Exception(f"验证码异常")
+
+    logger.info('填写验证码中...')
+    verification_code_input = page.locator('input.acc-input.msgCode')
+    for v in verification_code:
+        await verification_code_input.type(v, no_wait_after=True)
+        await asyncio.sleep(random.random() / 10)
+
+    logger.info('点击提交中...')
+    await page.click('a.btn')
+
+
 async def get_jd_pt_key(playwright: Playwright, user, mode) -> Union[str, None]:
     """
     获取jd的pt_key
@@ -412,7 +500,7 @@ async def get_jd_pt_key(playwright: Playwright, user, mode) -> Union[str, None]:
     except ImportError:
         headless = False
 
-    args = '--no-sandbox', '--disable-setuid-sandbox'
+    args = '--no-sandbox', '--disable-setuid-sandbox', '--disable-software-rasterizer', '--disable-gpu'
 
     try:
         # 引入代理
@@ -502,7 +590,7 @@ async def get_jd_pt_key(playwright: Playwright, user, mode) -> Union[str, None]:
 
             # 自动识别移动滑块验证码
             await asyncio.sleep(1)
-            await auto_move_slide(page, retry_times=5)
+            await auto_move_slide_v2(page, retry_times=5)
 
             # 自动验证形状验证码
             await asyncio.sleep(1)
@@ -513,6 +601,11 @@ async def get_jd_pt_key(playwright: Playwright, user, mode) -> Union[str, None]:
             if await page.locator('text="手机短信验证"').count() != 0:
                 logger.info("开始短信验证码识别环节")
                 await sms_recognition(page, user, mode)
+
+            # 进行手机语音验证识别
+            if await page.locator('div#header .text-header:has-text("手机语音验证")').count() > 0:
+                logger.info("检测到手机语音验证页面,开始识别")
+                await voice_verification(page, user, mode)
 
             # 检查警告,如账号存在风险或账密不正确等
             await check_notice(page)
@@ -611,14 +704,16 @@ async def main(mode: str = None):
             # 先获取启用中的env_data
             up_jd_ck_list = filter_cks(jd_ck_env_datas, status=0, name='JD_COOKIE')
             # 这一步会去检测这些JD_COOKIE
-            ck_ids_datas = await get_invalid_ck_ids(up_jd_ck_list)
-            if ck_ids_datas:
+            invalid_cks_id_list = await get_invalid_ck_ids(up_jd_ck_list)
+            if invalid_cks_id_list:
                 # 禁用QL的失效环境变量
+                ck_ids_datas = bytes(json.dumps(invalid_cks_id_list), 'utf-8')
                 await qlapi.envs_disable(data=ck_ids_datas)
                 # 更新jd_ck_env_datas
-                jd_ck_env_datas = [{**x, 'status': 1} for x in jd_ck_env_datas if x.get('id') in ck_ids_datas or x.get('_id') in ck_ids_datas]
+                jd_ck_env_datas = [{**x, 'status': 1} for x in invalid_cks_id_list if x.get('id') in ck_ids_datas or x.get('_id') in ck_ids_datas]
             logger.info("检测CK任务完成")
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"检测CK任务失败, 跳过检测, 报错原因为{e}")
 
         # 获取需强制更新pt_pin
